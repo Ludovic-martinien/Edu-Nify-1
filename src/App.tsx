@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
-import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import { LanguageProvider } from "./contexts/LanguageContext";
 import { NotificationProvider, useNotification } from "./contexts/NotificationContext";
 import { EstablishmentProvider } from "./contexts/EstablishmentContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -70,8 +70,6 @@ import { Trash } from "./pages/Trash";
 
 function AppContent() {
   const { currentUser, loading } = useAuth();
-  const { theme } = useTheme();
-  const { t } = useLanguage();
   const { notifySuccess, notifyError } = useNotification();
   
   // Navigation states
@@ -86,10 +84,6 @@ function AppContent() {
     if (currentUser) {
       if (currentUser.role === "élève") {
         setActiveTab("student_dashboard");
-      } else if (currentUser.role === "parent") {
-        setActiveTab("dashboard");
-      } else if (currentUser.role === "cuisinier") {
-        setActiveTab("dashboard");
       } else {
         setActiveTab("dashboard");
       }
