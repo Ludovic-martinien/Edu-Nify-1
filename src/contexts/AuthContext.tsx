@@ -64,6 +64,8 @@ interface AuthContextType {
   login: (email: string, mdp: string) => Promise<void>;
   register: (data: Omit<User, 'id' | 'date_creation' | 'face_id' | 'fingerprint_id'>, mdp: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateCurrentUser: (data: Partial<User>) => void;
+  refreshCurrentUser: () => Promise<void>;
   loading: boolean;
 }
 
@@ -84,7 +86,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
         return prev;
       });
-    }, 8000); // 8 seconds safety margin
+    }, 2500); // 2.5 seconds safety margin
 
     // Check if there is a mock fallback user saved
     const storedMockUser = localStorage.getItem('mock_admin_user');
@@ -251,6 +253,84 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [currentUser]);
+
+  // Real-time synchronization of currentUser document with Firestore
+  useEffect(() => {
+    if (!currentUser?.id || !isFirebaseConfigured) return;
+    const docRef = doc(db, 'users', currentUser.id);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const raw = docSnap.data() || {};
+        const normRole = getNormalizedRole(raw.role || 'élève');
+        const updatedData: User = {
+          id: docSnap.id,
+          ...raw,
+          role: normRole
+        } as User;
+
+        setCurrentUser(prev => {
+          if (!prev) return updatedData;
+          // Merge to preserve local session tokens/fields if any
+          return { ...prev, ...updatedData };
+        });
+
+        // Keep local fallback storage updated as well
+        const storedMock = localStorage.getItem('mock_admin_user');
+        if (storedMock) {
+          try {
+            const parsed = JSON.parse(storedMock);
+            localStorage.setItem('mock_admin_user', JSON.stringify({ ...parsed, ...updatedData }));
+          } catch (e) {
+            console.error("Failed to sync mock_admin_user with snapshot:", e);
+          }
+        }
+      }
+    }, (err) => {
+      console.warn("User doc real-time listener error:", err);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser?.id]);
+
+  const updateCurrentUser = (data: Partial<User>) => {
+    setCurrentUser(prev => {
+      if (!prev) return null;
+      const merged = { ...prev, ...data };
+      const storedMock = localStorage.getItem('mock_admin_user');
+      if (storedMock) {
+        try {
+          const parsed = JSON.parse(storedMock);
+          localStorage.setItem('mock_admin_user', JSON.stringify({ ...parsed, ...merged }));
+        } catch (e) {
+          console.error("Failed to update mock_admin_user in localStorage:", e);
+        }
+      }
+      return merged;
+    });
+  };
+
+  const refreshCurrentUser = async () => {
+    if (!currentUser?.id || !isFirebaseConfigured) return;
+    try {
+      const docSnap = await getDoc(doc(db, 'users', currentUser.id));
+      if (docSnap.exists()) {
+        const raw = docSnap.data() || {};
+        const normRole = getNormalizedRole(raw.role || 'élève');
+        const updatedData: User = {
+          id: docSnap.id,
+          ...raw,
+          role: normRole
+        } as User;
+        setCurrentUser(prev => ({ ...prev, ...updatedData }));
+        const storedMock = localStorage.getItem('mock_admin_user');
+        if (storedMock) {
+          localStorage.setItem('mock_admin_user', JSON.stringify(updatedData));
+        }
+      }
+    } catch (err) {
+      console.error("Error refreshing current user:", err);
+    }
+  };
 
   const login = async (email: string, mdp: string) => {
     if (!isFirebaseConfigured) throw new Error("Firebase non configuré");
@@ -501,9 +581,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+        <div className="relative flex items-center justify-center">
+          <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          <div className="absolute text-indigo-600 font-black text-xl">EN</div>
+        </div>
+        <p className="mt-4 text-sm font-bold text-gray-700 dark:text-gray-300 animate-pulse">
+          Chargement de l'écosystème Edu-Nify...
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <AuthContext.Provider value={{ currentUser, login, register, logout, loading }}>
-      {!isInitializing && children}
+    <AuthContext.Provider value={{ currentUser, login, register, logout, updateCurrentUser, refreshCurrentUser, loading }}>
+      {children}
     </AuthContext.Provider>
   );
 };
