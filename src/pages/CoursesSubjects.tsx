@@ -84,6 +84,10 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
   });
 
   const isAdmin = currentUser?.role === 'admin' || 
+                  isSuperAdmin ||
+                  currentUser?.role === 'personnel administratif' ||
+                  currentUser?.role === 'responsable_lycee' ||
+                  (currentUser as any)?.poste === 'Responsable Lycée' ||
                   currentUser?.email === 'martinienmvezogo@gmail.com';
   const isStudent = currentUser?.role === 'élève' || currentUser?.role === 'eleve';
 
@@ -1078,7 +1082,6 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log("Setting addingSubjectToClass for:", cls.id);
                               setAddingSubjectToClass(addingSubjectToClass === cls.id ? null : cls.id);
                             }}
                             className={`p-2 rounded-xl transition-all shadow-sm ${addingSubjectToClass === cls.id ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:scale-105 active:scale-95'}`}
@@ -1152,7 +1155,6 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
                         {isAdmin && (
                           <button
                             onClick={() => {
-                              console.log("Empty matieres - clicking add for:", cls.id);
                               setAddingSubjectToClass(cls.id);
                             }}
                             className="mt-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-900/40 px-3 py-1.5 rounded-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 shadow-sm border border-indigo-100"
