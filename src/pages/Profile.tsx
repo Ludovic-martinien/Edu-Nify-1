@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotification } from '../contexts/NotificationContext';
 import { auth, db, storage } from '../lib/firebase';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { collection, doc, updateDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { User, Lock, Mail, Shield, BookOpen, Fingerprint, AlertCircle, CheckCircle2, RefreshCw, Briefcase, Target, Calendar, Edit2, Save, Camera, Plus, X, Phone, MapPin, User2, GraduationCap, History, UserCircle } from 'lucide-react';
 import { resizeImage } from '../lib/imageUtils';
 
 export default function Profile() {
-  const { currentUser } = useAuth();
+  const { currentUser, updateCurrentUser } = useAuth();
   const { t, language, tData } = useLanguage();
   const { notifySuccess, notifyError } = useNotification();
   
@@ -18,6 +18,8 @@ export default function Profile() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
+  const [nom, setNom] = useState(currentUser?.nom || '');
+  const [prenom, setPrenom] = useState(currentUser?.prenom || '');
   const [biographie, setBiographie] = useState(currentUser?.biographie || '');
   const [matieres, setMatieres] = useState<string[]>(currentUser?.matieres || (currentUser?.matiere ? [currentUser.matiere] : []));
   const [newMatiere, setNewMatiere] = useState('');
@@ -28,6 +30,22 @@ export default function Profile() {
   const [diploma, setDiploma] = useState(currentUser?.diploma || '');
   const [experienceYears, setExperienceYears] = useState(currentUser?.experience_years?.toString() || '');
   const [age, setAge] = useState(currentUser?.age?.toString() || '');
+
+  // Synchronize local form states with currentUser whenever currentUser updates
+  useEffect(() => {
+    if (currentUser) {
+      setNom(currentUser.nom || '');
+      setPrenom(currentUser.prenom || '');
+      setContact(currentUser.contact || '');
+      setAddress(currentUser.address || '');
+      setGender(currentUser.gender || 'not_specified');
+      setDiploma(currentUser.diploma || '');
+      setExperienceYears(currentUser.experience_years?.toString() || '');
+      setAge(currentUser.age?.toString() || '');
+      setBiographie(currentUser.biographie || '');
+      setMatieres(currentUser.matieres || (currentUser.matiere ? [currentUser.matiere] : []));
+    }
+  }, [currentUser]);
 
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [isEditingMatieres, setIsEditingMatieres] = useState(false);
@@ -45,7 +63,7 @@ export default function Profile() {
   const [viewTab, setViewTab] = useState<'info' | 'history'>('info');
   const [userLogs, setUserLogs] = useState<any[]>([]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!currentUser) return;
 
     const q = query(
@@ -132,11 +150,10 @@ export default function Profile() {
     setSavingBio(true);
     try {
       const userRef = doc(db, 'users', currentUser.id);
-      await updateDoc(userRef, {
-        biographie: biographie
-      });
+      await setDoc(userRef, { biographie: biographie }, { merge: true });
+      updateCurrentUser({ biographie });
       setIsEditingBio(false);
-      // Note: currentUser will be updated via onSnapshot in AuthContext
+      notifySuccess("Biographie mise à jour avec succès !");
     } catch (err) {
       console.error("Erreur lors de la mise à jour de la biographie:", err);
       notifyError(t('bio_update_error'));
@@ -150,15 +167,20 @@ export default function Profile() {
     setSavingInfo(true);
     try {
       const userRef = doc(db, 'users', currentUser.id);
-      await updateDoc(userRef, {
-        contact: contact,
-        address: address,
+      const updatedPayload = {
+        nom: nom.trim() || currentUser.nom,
+        prenom: prenom.trim() || currentUser.prenom,
+        contact: contact.trim(),
+        address: address.trim(),
         gender: gender,
-        diploma: diploma,
+        diploma: diploma.trim(),
         experience_years: experienceYears ? parseInt(experienceYears) : null,
         age: age ? parseInt(age) : null
-      });
+      };
+      await setDoc(userRef, updatedPayload, { merge: true });
+      updateCurrentUser(updatedPayload);
       setIsEditingInfo(false);
+      notifySuccess("Profil et informations enregistrés avec succès !");
     } catch (err) {
       console.error("Erreur lors de la mise à jour des informations:", err);
       notifyError(t('info_update_error'));
@@ -172,11 +194,14 @@ export default function Profile() {
     setSavingMatieres(true);
     try {
       const userRef = doc(db, 'users', currentUser.id);
-      await updateDoc(userRef, {
+      const payload = {
         matieres: matieres,
-        matiere: matieres.length > 0 ? matieres[0] : null // Keep for backward compatibility
-      });
+        matiere: matieres.length > 0 ? matieres[0] : null
+      };
+      await setDoc(userRef, payload, { merge: true });
+      updateCurrentUser(payload);
       setIsEditingMatieres(false);
+      notifySuccess("Matières enregistrées avec succès !");
     } catch (err) {
       console.error("Erreur lors de la mise à jour des matières:", err);
       notifyError(t('subjects_update_error'));
@@ -216,8 +241,10 @@ export default function Profile() {
       const downloadURL = await getDownloadURL(storageRef);
       
       const userRef = doc(db, 'users', currentUser.id);
-      await updateDoc(userRef, { [type]: downloadURL });
+      await setDoc(userRef, { [type]: downloadURL }, { merge: true });
+      updateCurrentUser({ [type]: downloadURL });
       setSuccess(t('photo_updated_success').replace('{{type}}', type === 'photo' ? t('profile_photo') : t('cover_photo')));
+      notifySuccess(t('photo_updated_success').replace('{{type}}', type === 'photo' ? t('profile_photo') : t('cover_photo')));
     } catch (err) {
       console.error(err);
       setError(t('upload_error'));
@@ -446,6 +473,8 @@ export default function Profile() {
                   <button 
                     onClick={() => {
                       setIsEditingInfo(false);
+                      setNom(currentUser.nom || '');
+                      setPrenom(currentUser.prenom || '');
                       setContact(currentUser.contact || '');
                       setAddress(currentUser.address || '');
                       setGender(currentUser.gender || 'not_specified');
@@ -472,6 +501,32 @@ export default function Profile() {
 
             {isEditingInfo ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Prénom</label>
+                  <div className="relative">
+                    <User2 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                    <input
+                      type="text"
+                      value={prenom}
+                      onChange={(e) => setPrenom(e.target.value)}
+                      placeholder="Prénom"
+                      className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 font-medium"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Nom</label>
+                  <div className="relative">
+                    <User2 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                    <input
+                      type="text"
+                      value={nom}
+                      onChange={(e) => setNom(e.target.value)}
+                      placeholder="Nom de famille"
+                      className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 font-medium"
+                    />
+                  </div>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">{t('contact')}</label>
                   <div className="relative">
@@ -530,10 +585,23 @@ export default function Profile() {
                     <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                     <input
                       type="text"
+                      list="profile-diplomas-list"
                       value={diploma}
                       onChange={(e) => setDiploma(e.target.value)}
+                      placeholder="Sélectionner ou saisir un diplôme..."
                       className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
                     />
+                    <datalist id="profile-diplomas-list">
+                      <option value="Licence" />
+                      <option value="Master" />
+                      <option value="Doctorat" />
+                      <option value="CPAS" />
+                      <option value="CAPES" />
+                      <option value="Agrégation" />
+                      <option value="BTS / DUT" />
+                      <option value="Baccalauréat" />
+                      <option value="DNB - Brevet" />
+                    </datalist>
                   </div>
                 </div>
                 <div>
