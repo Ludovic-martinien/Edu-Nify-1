@@ -26,7 +26,7 @@ import { db } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Login() {
-  const [isRegisteringState, setIsRegisteringState] = useState(false);
+  const [isRegistering, setIsRegisteringState] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -49,8 +49,10 @@ export default function Login() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const isRegistering = false;
-  const setIsRegistering = (value: boolean) => {};
+  const setIsRegistering = (value: boolean) => {
+    setIsRegisteringState(value);
+    window.history.pushState({ isRegistering: value }, '');
+  };
 
   // Stepper State
   const [step, setStep] = useState(1);
@@ -710,6 +712,20 @@ export default function Login() {
                     <ShieldCheck size={20} />
                   )}
                   {loading ? t('verifying') : t('login_button')}
+                </button>
+              </motion.div>
+
+              <motion.div variants={fadeUpVariants} className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegistering(true);
+                    setError('');
+                    setSuccess('');
+                  }}
+                  className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                >
+                  Pas encore de compte ? Faire une demande d'accès
                 </button>
               </motion.div>
             </motion.form>
